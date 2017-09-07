@@ -4,6 +4,11 @@ import (
 	"fmt"
 	"mapreduce"
 	"os"
+	"strconv"
+	"log"
+	"strings"
+	"unicode"
+	"unicode/utf8"
 )
 
 //
@@ -14,7 +19,46 @@ import (
 // of key/value pairs.
 //
 func mapF(filename string, contents string) []mapreduce.KeyValue {
-	// TODO: you have to write this function
+	wordMap := make(map[string]int)
+
+	ss := 0
+	words := strings.Fields(contents)
+
+	for _, word := range words {
+		//word = strings.ToLower(word)
+		if word[0:1] == "\"" {
+			ss = ss + 1
+		}
+		preIndex := 0
+		for index, char := range word {
+			if !unicode.IsLetter(char)  {
+				if preIndex < index {
+					tmp := word[preIndex:index]
+					wordMap[tmp] += 1
+					ss += 1
+				}
+				preIndex = index + 1
+			}
+		}
+
+		r, _ := utf8.DecodeRuneInString(word[len(word)-1:])
+
+		if preIndex < len(word) && unicode.IsLetter(r) {
+			tmp := word[preIndex:]
+			wordMap[tmp] += 1
+			ss += 1
+		}
+	}
+
+	var result []mapreduce.KeyValue
+
+	sum := 0
+	for key := range wordMap {
+		result = append(result, mapreduce.KeyValue{key, strconv.Itoa(wordMap[key])})
+		sum += wordMap[key]
+	}
+
+	return result
 }
 
 //
@@ -23,7 +67,19 @@ func mapF(filename string, contents string) []mapreduce.KeyValue {
 // any map task.
 //
 func reduceF(key string, values []string) string {
-	// TODO: you also have to write this function
+	result := 0
+	if key == "he" {
+		result = 0
+	}
+	for _, value := range values {
+		n, err := strconv.Atoi(value)
+		if err != nil {
+			log.Fatal("Can not convert ", value)
+		}
+		result += n
+	}
+
+	return strconv.Itoa(result)
 }
 
 // Can be run in 3 ways:

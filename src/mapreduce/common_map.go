@@ -66,29 +66,23 @@ func doMap(
 
 	kvs := mapF(inFile, contents)
 
+	fileMap := make(map[string]* os.File)
 	for _, kv := range kvs {
 		reduceFileName := reduceName(jobName, mapTaskNumber, ihash(kv.Key) % nReduce)
 
-		var _, err = os.Stat(reduceFileName)
+		reduceFile, ok := fileMap[reduceFileName]
 
-		// create file if not exists
-		if os.IsNotExist(err) {
-			var file, _ = os.Create(reduceFileName)
-			file.Close()
-		}
-
-		reduceFile, err := os.OpenFile(
-			reduceFileName,
-			os.O_APPEND|os.O_WRONLY,
-			0600)
-
-		if err != nil {
-			log.Fatal("Open file", reduceFileName, "error ", err)
+		if ! ok {
+			reduceFile = getFile(reduceFileName)
+			fileMap[reduceFileName] = reduceFile
 		}
 
 		enc := json.NewEncoder(reduceFile)
 		enc.Encode(&kv)
-		reduceFile.Close()
+	}
+
+	for _, file := range fileMap {
+		file.Close()
 	}
 
 }
@@ -97,4 +91,24 @@ func ihash(s string) int {
 	h := fnv.New32a()
 	h.Write([]byte(s))
 	return int(h.Sum32() & 0x7fffffff)
+}
+
+func getFile(fileName string) * os.File {
+	var _, err = os.Stat(fileName)
+
+	// create file if not exists
+	if os.IsNotExist(err) {
+		var file, _ = os.Create(fileName)
+		file.Close()
+	}
+
+	reduceFile, err := os.OpenFile(
+		fileName,
+		os.O_APPEND|os.O_WRONLY,
+		0600)
+
+	if err != nil {
+		log.Fatal("Open file ", fileName, "error ", err)
+	}
+	return reduceFile
 }

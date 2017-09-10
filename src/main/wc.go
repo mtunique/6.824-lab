@@ -68,9 +68,6 @@ func mapF(filename string, contents string) []mapreduce.KeyValue {
 //
 func reduceF(key string, values []string) string {
 	result := 0
-	if key == "he" {
-		result = 0
-	}
 	for _, value := range values {
 		n, err := strconv.Atoi(value)
 		if err != nil {

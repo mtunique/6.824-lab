@@ -48,16 +48,15 @@ func schedule(jobName string, mapFiles []string, nReduce int, phase jobPhase, re
 	doneTaskNum := 0
 	doneTask := make(chan string, ntasks)
 	go func() {
+		defer debug("Close all done\n")
 		for {
-			select {
-			case address := <- doneTask:
-				if doneTaskNum == ntasks {
-					close(doneTask)
-					close(tasks)
-					return
-				}
-				registerChan <- address
+			address := <- doneTask
+			if doneTaskNum == ntasks {
+				close(doneTask)
+				close(tasks)
+				return
 			}
+			registerChan <- address
 		}
 	}()
 
@@ -66,7 +65,10 @@ func schedule(jobName string, mapFiles []string, nReduce int, phase jobPhase, re
 		var taskIndex int
 		flag := false
 		select {
-		case task := <- tasks:
+		case task, ok := <- tasks:
+			if ! ok {
+				break L
+			}
 			taskIndex = task
 			debug("Get task %d\n", taskIndex)
 			flag = true

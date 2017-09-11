@@ -36,85 +36,38 @@ func schedule(jobName string, mapFiles []string, nReduce int, phase jobPhase, re
 
 	var wg sync.WaitGroup
 
-	tasks := make(chan int)
-
-	go func() {
-		for taskIndex := 0; taskIndex < ntasks; taskIndex++ {
-			tasks <- taskIndex
-		}
-		debug("Task for done\n")
-	}()
-
-	doneTaskNum := 0
-	doneTask := make(chan string, ntasks)
-	go func() {
-		defer debug("Close all done\n")
-		for {
-			address := <- doneTask
-			if doneTaskNum == ntasks {
-				close(doneTask)
-				close(tasks)
-				return
-			}
-			registerChan <- address
-		}
-	}()
-
-	L:
-	for {
-		var taskIndex int
-		flag := false
-		select {
-		case task, ok := <- tasks:
-			if ! ok {
-				break L
-			}
-			taskIndex = task
-			debug("Get task %d\n", taskIndex)
-			flag = true
-		default:
-			if doneTaskNum == ntasks {
-				debug("Main for done\n")
-				break L
-			}
-		}
-
-		if ! flag {
-			continue
-		}
-
+	for taskIndex := 0; taskIndex < ntasks; taskIndex++ {
 		fileName := ""
 		if phase == mapPhase {
 			fileName = mapFiles[taskIndex]
 		}
 
-		workerAddress := <- registerChan
-
 		wg.Add(1)
-		go func(address string, taskIndex int) {
-			defer wg.Done()
-			debug("Start worker %s task %d %s\n", workerAddress, taskIndex, fileName)
+		go func(taskIndex int) {
+			for {
+				workerAddress := <- registerChan
+				debug("Start worker %s task %d %s\n", workerAddress, taskIndex, fileName)
 
-			if !call(address,
-				"Worker.DoTask",
-				DoTaskArgs{
-					jobName,
-					fileName,
-					phase,
-					taskIndex,
-					n_other,
-				},
-				nil) {
-				debug("Task %d failed\n", taskIndex)
-				tasks <- taskIndex
-				debug("Add %d\n", taskIndex)
-			} else {
-				debug("Done worker %s task %d\n", workerAddress, taskIndex)
-				doneTask <- address
-				debug("Add address %s\n", address)
-				doneTaskNum += 1
+				if call(workerAddress,
+					"Worker.DoTask",
+					DoTaskArgs{
+						jobName,
+						fileName,
+						phase,
+						taskIndex,
+						n_other,
+					},
+					nil) {
+					debug("Done worker %s task %d\n", workerAddress, taskIndex)
+					wg.Done()
+					select {
+					case registerChan <- workerAddress:
+						debug("Add address %s\n", workerAddress)
+					}
+					break
+				}
 			}
-		}(workerAddress, taskIndex)
+		}(taskIndex)
 	}
 
 	debug("Wait for done\n")
